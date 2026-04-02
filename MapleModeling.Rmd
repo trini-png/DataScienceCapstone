@@ -10,16 +10,102 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ## R Markdown
-
 ```{r}
-2+2
-
-3+3
-
-4+4
-```
-```{r}
-8+8
+#libraries needed for the project
+#any uncommon libraries will include a blurb about their purpose
+library(terra)  ##allows me to work with raster data
+library(dplyr)
+library(readr)
 
 ```
+
+
+
+## STEP 1: LOADING IN MY DATA
+
+#loading in my World Clim variables 
+#chosen variables: bio1, bio4, bio5, bio12, bio15, bio16 
+```{r}
+#setting my path to my WorldClimVariables folder 
+path <- "C:/Users/trini/Desktop/WorldClimVariables/"
+
+#loading in the my six chosen variables from the 19 
+bio1  <- rast(paste0(path, "wc2.1_10m_bio_1.tif"))
+bio4  <- rast(paste0(path, "wc2.1_10m_bio_4.tif"))
+bio5  <- rast(paste0(path, "wc2.1_10m_bio_5.tif"))
+bio12 <- rast(paste0(path, "wc2.1_10m_bio_12.tif"))
+bio15 <- rast(paste0(path, "wc2.1_10m_bio_15.tif"))
+bio16 <- rast(paste0(path, "wc2.1_10m_bio_16.tif"))
+
+#combining all my variables into a stack (object) so they can be used 
+climate_stack <- c(bio1, bio4, bio5, bio12, bio15, bio16)
+
+#checking the stack
+plot(climate_stack)
+```
+
+```{r}
+#restricting my data to North America
+#this code cuts off my map geographically using mins and maxs for latitude and longitude to create a bounding box
+ext_na <- ext(-170, -50, 10, 80)
+
+climate_na <- crop(climate_stack, ext_na)
+
+plot(climate_na)
+```
+#loading in my GBIF data
+#Beforehand in Excel, the data was separated vis a tab delimiter to give it a better (cleaner) starting point in R. I had originally tried to clean it in R but it became too much of a hassle so I fixed it in Excel
+```{r}
+sugar_clean <- read_csv("C:/Users/trini/Desktop/GBIF_Acer.csv")
+
+#convert my GBIF data to spatial data
+sugar_points <- vect(
+  sugar_clean,
+  geom = c("decimalLongitude", "decimalLatitude"),
+  crs = "EPSG:4326"
+)
+
+#renaming my WorldClim variable columns 
+names(climate_na) <- c("BIO1", "BIO4", "BIO5", "BIO12", "BIO15", "BIO16")
+
+#THE CODE THAT COMBINES THE GBIF AND THE WORLD CLIM
+climate_extract <- extract(climate_na, sugar_points)
+
+sugar_climate <- bind_cols(sugar_clean, climate_extract[, -1])
+head(sugar_climate)
+```
+#from this point, it is clear that there is a lot of cleaning and processing that needs to be done before Exploratory Data Analysis (because the majority of these columns have no use to my analysis) but the datasets are together.
+
+
+```{r}
+colnames(sugar_climate)
+```
+# STEP 2: STARTING TO FIX MY DATA FOR EXPLORATORY DATA ANALYSIS (EDA)
+```{r}
+#TO DO LIST
+
+#1: fix the coordinates so that that the BIO variables generate data 
+#2: get rid of unnecessary columns by creating a new cleaned table from the data set 
+    #will make it easier to look at 
+#3: continue/finish data dictionary
+#4: start thinking about any derived variables you want to create after EDA
+
+
+
+#The main variables that I will need to use and make sure are good bf/during EDA are 
+      #all BIO variables
+      #anything related to location (locality, countryCode. etc. )
+      #decimalLongitude
+      #decimalLatitude
+      #anything related to time 
+      #
+
+
+```
+
+
+
+
+
+
 
