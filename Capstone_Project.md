@@ -21,7 +21,7 @@ suitability change with the varying climate?
 ## Weekly Notes 
 
 # Week 3: Exploratory Data Analysis (EDA)
-  -
+  - 4/1/26: finsihed setting up GitHub, both in GitHub website and in RStudio
   -
   -
   -
