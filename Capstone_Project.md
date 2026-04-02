@@ -16,3 +16,17 @@ suitability change with the varying climate?
 ## Hypothesis & Predictions
   Hypothesis: Sugar maples will be more abundant in areas that have moderate temperature and precipitation (i.e. no extreme conditions)
   Prediction: Climatic variables will play a significant role in the distribution of a given species throughout a given region
+
+
+## Weekly Notes 
+
+# Week 3: Exploratory Data Analysis (EDA)
+  -
+  -
+  -
+  -
+  -
+  -
+  -
+
+  
