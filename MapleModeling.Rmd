@@ -84,8 +84,8 @@ colnames(sugar_climate)
 ```{r}
 #TO DO LIST
 
-#1: fix the coordinates so that that the BIO variables generate data 
-#2: get rid of unnecessary columns by creating a new cleaned table from the data set 
+#1: fix the coordinates so that that the BIO variables generate data (DONE)
+#2: get rid of unnecessary columns by creating a new cleaned table from the data set (DONE)
     #will make it easier to look at 
 #3: continue/finish data dictionary
 #4: start thinking about any derived variables you want to create after EDA
@@ -104,6 +104,75 @@ colnames(sugar_climate)
 ```
 
 
+#creating a table that is a subset of my data to fix the World Clim variable issue 
+```{r}
+#extracting columns for the table
+sugar_coords <- sugar_clean %>%
+  transmute(
+    species = as.character(species),
+    scientificName = as.character(scientificName),
+    decimalLatitude = as.numeric(decimalLatitude),
+    decimalLongitude = as.numeric(decimalLongitude),
+    countryCode = as.character(countryCode),
+    stateProvince = as.character(stateProvince)
+  )
+
+#removing coordinates that are not within the bounding box (impossible within the confines of our geographic range)
+sugar_coords <- sugar_coords %>%
+  filter(decimalLatitude >= -90, decimalLatitude <= 90) %>%
+  filter(decimalLongitude >= -180, decimalLongitude <= 180)
+
+#removing missing coordinates 
+#sugar_coords <- sugar_coords %>%
+#  filter(!is.na(decimalLatitude), !is.na(decimalLongitude))
+
+#keeping the North American coordinates 
+sugar_coords <- sugar_coords %>%
+  filter(decimalLatitude >= 10, decimalLatitude <= 80) %>%
+  filter(decimalLongitude >= -170, decimalLongitude <= -50)
+
+#checking the ranges 
+sugar_coords <- sugar_coords %>%
+  filter(decimalLatitude >= 10, decimalLatitude <= 80) %>%
+  filter(decimalLongitude >= -170, decimalLongitude <= -50)
+
+
+#NOTE: I did not remove any missing (or duplicate values, although I don't plan to remove duplicate values, as we are targeting abundance) yet, as I feel those can be dealt with during data preprocessing. The cleaning that I did was only out of necessity to join the data sets. I did create the code to do so and it will be here. 
+
+head(sugar_coords)
+```
+
+```{r}
+#remaking the points object from earlier (line 61) but within my new table
+sugar_points2 <- vect(
+  sugar_coords,
+  geom = c("decimalLongitude", "decimalLatitude"),
+  crs = "EPSG:4326"
+)
+
+#checking that the points are in the raster
+ext(climate_na)
+ext(sugar_points2)
+
+plot(climate_na[[1]])
+points(sugar_points2, col = "red", pch = 20, cex = 0.4)
+```
+```{r}
+#reruning my extraction
+names(climate_na) <- c("BIO1", "BIO4", "BIO5", "BIO12", "BIO15", "BIO16")
+
+climate_extract2 <- extract(climate_na, sugar_points2)
+
+colSums(is.na(climate_extract2))
+head(climate_extract2)
+
+#combining the climate values with my cleaned table 
+sugar_climate2 <- bind_cols(sugar_coords, climate_extract2[, -1])
+
+head(sugar_climate2)
+summary(sugar_climate2[, c("BIO1", "BIO4", "BIO5", "BIO12", "BIO15", "BIO16")])
+
+```
 
 
 
