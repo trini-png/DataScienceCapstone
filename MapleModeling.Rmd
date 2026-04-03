@@ -80,29 +80,7 @@ head(sugar_climate)
 ```{r}
 colnames(sugar_climate)
 ```
-# STEP 2: STARTING TO FIX MY DATA FOR EXPLORATORY DATA ANALYSIS (EDA)
-```{r}
-#TO DO LIST
-
-#1: fix the coordinates so that that the BIO variables generate data (DONE)
-#2: get rid of unnecessary columns by creating a new cleaned table from the data set (DONE)
-    #will make it easier to look at 
-#3: continue/finish data dictionary
-#4: start thinking about any derived variables you want to create after EDA
-
-
-
-#The main variables that I will need to use and make sure are good bf/during EDA are 
-      #all BIO variables
-      #anything related to location (locality, countryCode. etc. )
-      #decimalLongitude
-      #decimalLatitude
-      #anything related to time 
-      #
-
-
-```
-
+# STEP 2: FIXING MY DATA FOR EXPLORATORY DATA ANALYSIS (EDA)
 
 #creating a table that is a subset of my data to fix the World Clim variable issue 
 ```{r}
@@ -174,7 +152,64 @@ summary(sugar_climate2[, c("BIO1", "BIO4", "BIO5", "BIO12", "BIO15", "BIO16")])
 
 ```
 
+# STEP 3: EXPLORATORY DATA ANALYSIS
 
+
+FOR THE REQUIREMENTS OF THE EDA:
+Table 1: sugar_climate2 (ABOVE)
+
+Table 2:
+```{r}
+#summary statistics table of the WorldClim variables
+bio_summary_table <- sugar_climate2 %>%
+  summarise(
+    BIO1_mean = mean(BIO1, na.rm = TRUE),
+    BIO1_sd   = sd(BIO1, na.rm = TRUE),
+    
+    BIO4_mean = mean(BIO4, na.rm = TRUE),
+    BIO4_sd   = sd(BIO4, na.rm = TRUE),
+    
+    BIO5_mean = mean(BIO5, na.rm = TRUE),
+    BIO5_sd   = sd(BIO5, na.rm = TRUE),
+    
+    BIO12_mean = mean(BIO12, na.rm = TRUE),
+    BIO12_sd   = sd(BIO12, na.rm = TRUE),
+    
+    BIO15_mean = mean(BIO15, na.rm = TRUE),
+    BIO15_sd   = sd(BIO15, na.rm = TRUE),
+    
+    BIO16_mean = mean(BIO16, na.rm = TRUE),
+    BIO16_sd   = sd(BIO16, na.rm = TRUE)
+  )
+
+bio_summary_table
+
+```
+
+
+Graph 1: Histogram of Temperature
+Graph 2: Histogram of Precipitation
+Graph 3: Scatterplot of BIO1 V BIO12
+Graph 4: Correlation Heatmap
+Graph 5: Geographic Map of Occurrences
+Graph 6: Boxplot of BIO1
+Graph 7: Density map of sugar maple occurrences 
+
+also consider a box and whisker for each of the BIO variables
+
+
+
+
+
+GOALS FOR TOMORROW:
+
+#1: join your sugar_climate2 dataset with the main data set (optional; ask Dr.Geist)
+#2: finish coding all of your graphs and tables (Part 1)
+#3: finish summary table (add min, max, median and fix formating)
+
+
+GOALS FOR THE  NEXT DAY: 
+#1: finish the figures and captions for your graphs and tables
 
 
 
