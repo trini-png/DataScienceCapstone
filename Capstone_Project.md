@@ -23,7 +23,7 @@ suitability change with the varying climate?
 # Week 3: Exploratory Data Analysis (EDA)
   - 4/1/26: finished setting up GitHub, both in GitHub website and in RStudio
   - 4/2/26: added and combined all of my data, started thinking about cleaning and EDA
-  -
+  - 4/3/26: fixed a probelm with the join on my datasets, made my first table, found 5 sources for my intro, mapped out all of my graphs and tables for EDA
   -
   -
   -
