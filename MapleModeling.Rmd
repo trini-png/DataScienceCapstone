@@ -17,8 +17,9 @@ library(terra)  ##allows me to work with raster data
 library(dplyr)
 library(readr)
 library(ggplot2)
-library(corrplot)
+library(corrplot) ##for heat map
 library(tidyr)
+library(psych)  ##for summary stats table
 
 ```
 
@@ -164,26 +165,10 @@ Table 1: sugar_climate2 (ABOVE)
 Table 2:
 ```{r}
 #summary statistics table of the WorldClim variables
-bio_summary_table <- sugar_climate2 %>%
-  summarise(
-    BIO1_mean = mean(BIO1, na.rm = TRUE),
-    BIO1_sd   = sd(BIO1, na.rm = TRUE),
-    
-    BIO4_mean = mean(BIO4, na.rm = TRUE),
-    BIO4_sd   = sd(BIO4, na.rm = TRUE),
-    
-    BIO5_mean = mean(BIO5, na.rm = TRUE),
-    BIO5_sd   = sd(BIO5, na.rm = TRUE),
-    
-    BIO12_mean = mean(BIO12, na.rm = TRUE),
-    BIO12_sd   = sd(BIO12, na.rm = TRUE),
-    
-    BIO15_mean = mean(BIO15, na.rm = TRUE),
-    BIO15_sd   = sd(BIO15, na.rm = TRUE),
-    
-    BIO16_mean = mean(BIO16, na.rm = TRUE),
-    BIO16_sd   = sd(BIO16, na.rm = TRUE)
-  )
+bio_summary_table <- describe(
+  sugar_climate2 %>%
+    select(BIO1, BIO4, BIO5, BIO12, BIO15, BIO16)
+)
 
 bio_summary_table
 
@@ -192,6 +177,8 @@ bio_summary_table
 
 Graph 1: Histogram of Temperature
 Graph 2: Histogram of Precipitation
+
+#rather than make separate histograms, I made one figure with each BIO variable represented as a histogram
 ```{r}
 long_data <- sugar_climate2 %>%
   select(BIO1, BIO4, BIO5, BIO12, BIO15, BIO16) %>%
@@ -240,32 +227,28 @@ ggplot(sugar_climate2, aes(y = BIO1)) +
 Graph 7: Density map of sugar maple occurrences 
 ```{r}
 ggplot(sugar_climate2, aes(x = decimalLongitude, y = decimalLatitude)) +
-  geom_bin2d() +
-  labs(title = "Density of Sugar Maple Occurrences")
-```
-```{r}
-ggplot(sugar_climate2, aes(x = decimalLongitude, y = decimalLatitude)) +
   geom_hex() +
   labs(title = "Hexbin Density of Sugar Maple Occurrences")
 ```
+
 ```{r}
 ggplot(sugar_climate2, aes(x = decimalLongitude, y = decimalLatitude, color = BIO1)) +
   geom_point(alpha = 0.5) +
   labs(title = "Sugar Maple Occurrences Colored by Temperature (BIO1)")
 ```
 
+AS OF RIGHT NOW:
 
+Table 1: joined and cleaned GBIF and WordClim
+Table 2: summary stats of BIO variables 
 
-
-GOALS FOR TOMORROW:
-
-#1: join your sugar_climate2 dataset with the main data set (optional; ask Dr.Geist)
-#2: finish coding all of your graphs and tables (Part 1)
-#3: finish summary table (add min, max, median and fix formating)
-
-
-GOALS FOR THE  NEXT DAY: 
-#1: finish the figures and captions for your graphs and tables
-
+Graph 1: Correlation Heat Map
+Graph 2: Regular Map of GBIF occurrences (with geom_point)
+Graph 3: Density Map of GBIF occurrences (with geom_hex)
+Graph 4: Density Map of GBIF occurrences with BIO1
+Graph 5: 6 Colorful Maps of BIO distribution across North Am. 
+Graph 6: Colorful Map of BIO distribution with red GBIF occurrences 
+Graph 7: 6 histograms of BIO variables 
+Graph 8: Scatterplot of BIO1 V. BIO12 
 
 
