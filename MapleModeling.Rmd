@@ -16,6 +16,9 @@ knitr::opts_chunk$set(echo = TRUE)
 library(terra)  ##allows me to work with raster data
 library(dplyr)
 library(readr)
+library(ggplot2)
+library(corrplot)
+library(tidyr)
 
 ```
 
@@ -189,14 +192,67 @@ bio_summary_table
 
 Graph 1: Histogram of Temperature
 Graph 2: Histogram of Precipitation
+```{r}
+long_data <- sugar_climate2 %>%
+  select(BIO1, BIO4, BIO5, BIO12, BIO15, BIO16) %>%
+  pivot_longer(everything(), names_to = "Variable", values_to = "Value")
+
+ggplot(long_data, aes(x = Value)) +
+  geom_histogram(bins = 30) +
+  facet_wrap(~Variable, scales = "free") +
+  labs(title = "Distributions of Climate Variables")
+```
+
 Graph 3: Scatterplot of BIO1 V BIO12
+```{r}
+ggplot(sugar_climate2, aes(x = BIO1, y = BIO12)) +
+  geom_point(alpha = 0.4) +
+  labs(title = "Temperature vs Precipitation")
+```
+
+
 Graph 4: Correlation Heatmap
+```{r}
+climate_data <- sugar_climate2 %>%
+  select(BIO1, BIO4, BIO5, BIO12, BIO15, BIO16)
+
+cor_matrix <- cor(climate_data, use = "complete.obs")
+
+corrplot(cor_matrix, method = "color")
+```
+
 Graph 5: Geographic Map of Occurrences
+```{r}
+ggplot(sugar_climate2, aes(x = decimalLongitude, y = decimalLatitude)) +
+  geom_point(alpha = 0.3) +
+  labs(title = "Geographic Distribution of Sugar Maple")
+```
+
+
 Graph 6: Boxplot of BIO1
+```{r}
+ggplot(sugar_climate2, aes(y = BIO1)) +
+  geom_boxplot() +
+  labs(title = "Distribution of Annual Temperature (BIO1)")
+```
+
+
 Graph 7: Density map of sugar maple occurrences 
-
-also consider a box and whisker for each of the BIO variables
-
+```{r}
+ggplot(sugar_climate2, aes(x = decimalLongitude, y = decimalLatitude)) +
+  geom_bin2d() +
+  labs(title = "Density of Sugar Maple Occurrences")
+```
+```{r}
+ggplot(sugar_climate2, aes(x = decimalLongitude, y = decimalLatitude)) +
+  geom_hex() +
+  labs(title = "Hexbin Density of Sugar Maple Occurrences")
+```
+```{r}
+ggplot(sugar_climate2, aes(x = decimalLongitude, y = decimalLatitude, color = BIO1)) +
+  geom_point(alpha = 0.5) +
+  labs(title = "Sugar Maple Occurrences Colored by Temperature (BIO1)")
+```
 
 
 
