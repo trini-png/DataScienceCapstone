@@ -20,6 +20,7 @@ library(ggplot2)
 library(corrplot) ##for heat map
 library(tidyr)
 library(psych)  ##for summary stats table
+library(flextable)  ##helps me take my tables from here to word (they are large)
 
 ```
 
@@ -96,7 +97,8 @@ sugar_coords <- sugar_clean %>%
     decimalLatitude = as.numeric(decimalLatitude),
     decimalLongitude = as.numeric(decimalLongitude),
     countryCode = as.character(countryCode),
-    stateProvince = as.character(stateProvince)
+    stateProvince = as.character(stateProvince),
+     year = as.numeric(year)
   )
 
 #removing coordinates that are not within the bounding box (impossible within the confines of our geographic range)
@@ -143,7 +145,7 @@ points(sugar_points2, col = "red", pch = 20, cex = 0.4)
 #reruning my extraction
 names(climate_na) <- c("BIO1", "BIO4", "BIO5", "BIO12", "BIO15", "BIO16")
 
-climate_extract2 <- extract(climate_na, sugar_points2)
+climate_extract2 <- terra::extract(climate_na, sugar_points2)
 
 colSums(is.na(climate_extract2))
 head(climate_extract2)
@@ -237,18 +239,57 @@ ggplot(sugar_climate2, aes(x = decimalLongitude, y = decimalLatitude, color = BI
   labs(title = "Sugar Maple Occurrences Colored by Temperature (BIO1)")
 ```
 
+Graph 8: Line Graph of year v. precipitation
+```{r}
+precip_by_year <- sugar_climate2 %>%
+  filter(!is.na(year)) %>%
+  group_by(year) %>%
+  summarise(mean_precip = mean(BIO12, na.rm = TRUE))
+
+ggplot(precip_by_year, aes(x = year, y = mean_precip)) +
+  geom_line() +
+  geom_smooth(se = FALSE) +
+  labs(
+    title = "Average Annual Precipitation Over Time",
+    x = "Year",
+    y = "Mean Precipitation (BIO12)"
+  )
+```
+
+Graph 9: Line Graph of year v. temperature 
+```{r}
+temp_by_year <- sugar_climate2 %>%
+  filter(!is.na(year)) %>%
+  group_by(year) %>%
+  summarise(mean_temp = mean(BIO1, na.rm = TRUE))
+
+ggplot(temp_by_year, aes(x = year, y = mean_temp)) +
+  geom_line() +
+  geom_smooth(se = FALSE) +
+  labs(
+    title = "Average Annual Temperature Over Time",
+    x = "Year",
+    y = "Mean Temperature (BIO1)"
+  )
+```
+
+
+
 AS OF RIGHT NOW:
 
-Table 1: joined and cleaned GBIF and WordClim
-Table 2: summary stats of BIO variables 
+Table 1: joined and cleaned GBIF and WordClim  **
+Table 2: summary stats of BIO variables  **
 
-Graph 1: Correlation Heat Map
+Graph 1: Correlation Heat Map  **
 Graph 2: Regular Map of GBIF occurrences (with geom_point)
 Graph 3: Density Map of GBIF occurrences (with geom_hex)
 Graph 4: Density Map of GBIF occurrences with BIO1
 Graph 5: 6 Colorful Maps of BIO distribution across North Am. 
-Graph 6: Colorful Map of BIO distribution with red GBIF occurrences 
-Graph 7: 6 histograms of BIO variables 
+Graph 6: Colorful Map of BIO distribution with red GBIF occurrences  **
+Graph 7: 6 histograms of BIO variables  **
 Graph 8: Scatterplot of BIO1 V. BIO12 
+
+Graph 9: line graphs **
+   
 
 
