@@ -52,14 +52,38 @@ climate_stack <- c(bio1, bio4, bio5, bio12, bio15, bio16)
 plot(climate_stack)
 ```
 
-```{r}
+```{r, fig.width=10, fig.height=6, echo=FALSE, warning=FALSE, message=FALSE}
 #restricting my data to North America
 #this code cuts off my map geographically using mins and maxs for latitude and longitude to create a bounding box
 ext_na <- ext(-170, -50, 10, 80)
 
 climate_na <- crop(climate_stack, ext_na)
 
+names(climate_na) <- c(
+  "BIO1",
+  "BIO4",
+  "BIO5",
+  "BIO12",
+  "BIO15",
+  "BIO16"
+)
+
+#make room for one outer title
+par(oma = c(0, 0, 4, 0))
+
+#plot the 6 layers
 plot(climate_na)
+
+#add one overall title
+mtext(
+  "Figure 1. Spatial Distribution of Selected WorldClim Variables Across North America",
+  side = 3,
+  outer = TRUE,
+  cex = 1.2,
+  font = 2,
+  line = 1
+)
+
 ```
 #loading in my GBIF data
 #Beforehand in Excel, the data was separated vis a tab delimiter to give it a better (cleaner) starting point in R. I had originally tried to clean it in R but it became too much of a hassle so I fixed it in Excel
@@ -129,7 +153,7 @@ sugar_coords <- sugar_coords %>%
 head(sugar_coords)
 ```
 
-```{r}
+```{r, fig.width=10, fig.height=6, echo=FALSE, warning=FALSE, message=FALSE}
 #remaking the points object from earlier (line 61) but within my new table
 sugar_points2 <- vect(
   sugar_coords,
@@ -141,8 +165,31 @@ sugar_points2 <- vect(
 ext(climate_na)
 ext(sugar_points2)
 
-plot(climate_na[[1]])
-points(sugar_points2, col = "red", pch = 20, cex = 0.4)
+# bigger outer margins
+par(mar = c(6, 5, 5, 9), xpd = NA)
+
+plot(
+  climate_na[["BIO1"]],
+  main = "Figure 2. Sugar Maple Occurrences Over BIO1 (Annual Mean Temperature)",
+  xlab = "",
+  ylab = "Latitude",
+  axes = TRUE,
+  plg = list(
+    x = 1.05,
+    title = "Annual Mean\nTemperature (°C)"
+  )
+)
+
+points(
+  sugar_points2,
+  col = "black",
+  pch = 16,
+  cex = 0.6
+)
+
+#not get cut off
+mtext("Longitude", side = 1, line = 3)
+
 ```
 ```{r}
 #reruning my extraction
@@ -177,9 +224,11 @@ bio_summary_table <- describe(
 
 kable(
   bio_summary_table,
-  caption = "Table 2. Summary Statistics for Selected WorldClim Variables",
+  caption = "Table 1. Summary Statistics for Selected WorldClim Variables",
   digits = 2
 )
+
+
 ```
 
 
@@ -202,18 +251,23 @@ theme_report <- theme_minimal(base_size = 12) +
 
 bio_long <- sugar_climate2 %>%
   select(BIO1, BIO4, BIO5, BIO12, BIO15, BIO16) %>%
-  pivot_longer(cols = everything(), names_to = "Variable", values_to = "Value")
+  pivot_longer(cols = everything(), names_to = "Variable", values_to = "Value") %>%
+  mutate(
+    Variable = factor(
+      Variable,
+      levels = c("BIO1", "BIO4", "BIO5", "BIO12", "BIO15", "BIO16")
+    )
+  )
 
-ggplot(bio_long, aes(x = Value)) +
-  geom_histogram(bins = 30) +
+ggplot(bio_long, aes(x = Value, fill = Variable)) +
+  geom_histogram(bins = 30, color = "black", alpha = 0.8) +
   facet_wrap(~ Variable, scales = "free") +
   labs(
-    title = "Figure 4. Distributions of Selected WorldClim Variables",
+    title = "Figure 3. Distributions of Selected WorldClim Variables",
     x = "Value",
     y = "Frequency"
   ) +
   theme_report
-
 
 ```
 
@@ -228,22 +282,30 @@ ggplot(sugar_climate2, aes(x = BIO1, y = BIO12)) +
 
 Graph 4: Correlation Heatmap
 ```{r}
+library(corrplot)
+library(dplyr)
+
 climate_data <- sugar_climate2 %>%
   select(BIO1, BIO4, BIO5, BIO12, BIO15, BIO16)
 
-cor_matrix <- cor(
-  sugar_climate2 %>% select(BIO1, BIO4, BIO5, BIO12, BIO15, BIO16),
-  use = "complete.obs"
-)
+cor_matrix <- cor(climate_data, use = "complete.obs")
+
+# increase margins for spacing
+par(mar = c(1, 1, 3, 1))
 
 corrplot(
   cor_matrix,
   method = "color",
+  type = "upper",
+  col = colorRampPalette(c("#4575b4", "white", "#d73027"))(200),
   tl.col = "black",
-  tl.cex = 0.8,
-  title = "Figure 5. Correlation Matrix of Selected Climate Variables",
-  mar = c(0, 0, 2, 0)
+  tl.cex = 1,
+  tl.srt = 30,             # less extreme angle
+  addCoef.col = "black",
+  number.cex = 0.8,
+  cl.cex = 0.8
 )
+
 ```
 
 Graph 5: Geographic Map of Occurrences
@@ -289,7 +351,7 @@ precip_by_year <- sugar_climate2 %>%
 ggplot(precip_by_year, aes(x = year, y = mean_precip)) +
   geom_line() +
   labs(
-    title = "Figure 7. Mean Annual Precipitation by Observation Year",
+    title = "Figure 5. Mean Annual Precipitation by Observation Year",
     x = "Year",
     y = "Mean Precipitation (BIO12)"
   ) +
@@ -305,6 +367,41 @@ temp_by_year <- sugar_climate2 %>%
 
 ggplot(temp_by_year, aes(x = year, y = mean_temp)) +
   geom_line() +
+  labs(
+    title = "Figure 6. Mean Annual Temperature by Observation Year",
+    x = "Year",
+    y = "Mean Temperature (BIO1)"
+  ) +
+  theme_report
+```
+
+Formatting the line graphs together
+```{r}
+precip_by_year <- sugar_climate2 %>%
+  filter(!is.na(year), year >= 1950) %>%
+  group_by(year) %>%
+  summarise(mean_precip = mean(BIO12, na.rm = TRUE))
+
+temp_by_year <- sugar_climate2 %>%
+  filter(!is.na(year), year >= 1950) %>%
+  group_by(year) %>%
+  summarise(mean_temp = mean(BIO1, na.rm = TRUE))
+
+#precipitation
+ggplot(precip_by_year, aes(x = year, y = mean_precip)) +
+  geom_line(color = "#1f78b4", alpha = 0.6) +
+  geom_smooth(color = "#e31a1c", se = FALSE, size = 1.2) +
+  labs(
+    title = "Figure 5. Mean Annual Precipitation by Observation Year",
+    x = "Year",
+    y = "Mean Precipitation (BIO12)"
+  ) +
+  theme_report
+
+#temperature
+ggplot(temp_by_year, aes(x = year, y = mean_temp)) +
+  geom_line(color = "#33a02c", alpha = 0.6) +
+  geom_smooth(color = "#e31a1c", se = FALSE, size = 1.2) +
   labs(
     title = "Figure 6. Mean Annual Temperature by Observation Year",
     x = "Year",
@@ -335,28 +432,11 @@ distribution_table
 
 kable(
   distribution_table,
-  caption = "Table 3. Spatial Distribution Summary of Sugar Maple Occurrences",
+  caption = "Table 2. Spatial Distribution Summary of Sugar Maple Occurrences",
   digits = 2
 )
 
 ```
-
-
-
-
-AS OF RIGHT NOW:
-
-Table 1: joined and cleaned GBIF and WordClim  **
-Table 2: summary stats of BIO variables  **
-
-Graph 1: Correlation Heat Map  **
-Graph 2: Regular Map of GBIF occurrences (with geom_point)
-Graph 3: Density Map of GBIF occurrences (with geom_hex)
-Graph 4: Density Map of GBIF occurrences with BIO1
-Graph 5: 6 Colorful Maps of BIO distribution across North Am. 
-Graph 6: Colorful Map of BIO distribution with red GBIF occurrences  **
-Graph 7: 6 histograms of BIO variables  **
-Graph 8: Scatterplot of BIO1 V. BIO12 
 
 Graph 9: line graphs **
    
