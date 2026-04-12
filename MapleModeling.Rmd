@@ -438,7 +438,327 @@ kable(
 
 ```
 
-Graph 9: line graphs **
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## STEP 4:DATA PREPROCESSING
+
+General Steps
+1. Train-test split ratio
+2. Encode categorical variables 
+3. Impute missing values 
+4. Perform arithmetic transformations
+5. Normalize, center, and/or scale
+
+```{r}
+#WorldClim -> importing the remaining 13 variables and assessing missing data 
+#Adding the remaining varaibles won't overwhelm my data (it's only 13) and will create a more robust analysis and a more robust model.
+
+path <- "C:/Users/trini/Desktop/WorldClimVariables/"
+
+#loading in all 19 WorldClim variables
+bio_files <- paste0(path, "wc2.1_10m_bio_", 1:19, ".tif")
+
+#combining all my variables into a stack (object) so they can be used
+climate_stack_ALL <- rast(bio_files)
+names(climate_stack_ALL) <- paste0("BIO", 1:19)
+
+#checking the stack
+plot(climate_stack_ALL)
+```
+
+```{r}
+#removing rows with missing/invalid coordinates before making points
+#WHY: This was added after troubleshooting combining the data sets and it allows me to have values for the BIO WorldClim variables.
+
+sugar_clean <- sugar_clean %>%
+  filter(
+    !is.na(decimalLongitude),
+    !is.na(decimalLatitude),
+    decimalLongitude >= -180, decimalLongitude <= 180,
+    decimalLatitude >= -90, decimalLatitude <= 90
+  )
+```
+
+
+
+```{r}
+
+# make spatial points from cleaned GBIF data
+sugar_points <- vect(
+  sugar_clean,
+  geom = c("decimalLongitude", "decimalLatitude"),
+  crs = "EPSG:4326"
+)
+
+# match CRS if needed
+if (!same.crs(sugar_points, climate_stack_ALL)) {
+  sugar_points <- project(sugar_points, crs(climate_stack_ALL))
+}
+
+# extract all 19 BIO values to the GBIF points
+climate_extract_19 <- terra::extract(climate_stack_ALL, sugar_points)
+
+# combine GBIF + extracted climate values
+sugar_climate_clean <- bind_cols(sugar_clean, climate_extract_19[, -1])
+
+```
+
+```{r}
+#cleaning my data 
+#GBIF -> getting rid of unnecessary values and assessing missing data 
+#The focus of my project is on abundance and time, and there are lots of variables related to the actual data collection that are not necessary to include in my model.
+
+#colnames(sugar_climate)
+
+
+#There are a lot of variables to remove so we'll do this in a step-wise way so I don't get rid of anything I truly need and so that I can find it quickly and add it back if I need to
+
+sugar_climate_clean <- sugar_climate_clean %>%
+  select(-c(
+    #Identifiers
+    #We don't need thesae because they aren't gonna help predict anything and they could cause overfitting
+    
+    gbifID, datasetKey, occurrenceID, taxonKey, speciesKey,
+    institutionCode, collectionCode, catalogNumber,
+    recordNumber, identifiedBy, recordedBy,
+    license, rightsHolder,
+    
+    #Taxonomic Hierachy 
+    #We don't need these because my project is only targeting one species (their inclusion is also redundant) and their inclusion could increase multicollinearity and noise in the models 
+    
+    kingdom, phylum, class, order, family, taxonRank,
+    
+    #species naming
+    #We don't need to include the names multiple times and there's too much text
+    
+    scientificName, verbatimScientificName,
+    verbatimScientificNameAuthorship, infraspecificEpithet,
+    
+    #Location text
+    #We are using lat and long for the points (but might include back later on), which are more precise for the model.
+    
+    countryCode, stateProvince, locality,
+    
+    #Data collection stuff
+    #We don't need because there is no biological relevance to my project
+    
+    publishingOrgKey, basisOfRecord,
+    typeStatus, issue, establishmentMeans, lastInterpreted, mediaType,
+    
+    #Precision / uncertainty
+    #We don't need for predictive modeling (but could be used for data quality analysis, which could be a good metric to include).
+    
+    coordinateUncertaintyInMeters, coordinatePrecision,
+    elevationAccuracy, depthAccuracy,
+    
+    #Depth 
+    depth
+  ))
+
+colnames(sugar_climate_clean)
+
+```
+
+```{r}
+#checking my newly combined data before proceeding
+head(sugar_climate_clean)
+```
+
+
+
+
+
+
+
+#CLEANING MISSING VALUES
+```{r}
+#cleaning up missing values in my GBIF dataset
+#Firstly, it makes sense that there are a lot of missing values, as GBIF occurrences are derived from a person's sample, with said person typically not having access to or including all of the relevant pieces of information. 
+
+#checking the columns for missingness
+colSums(is.na(sugar_climate_clean))
+
+```
+
+#ENCODING VARIABLES
+```{r}
+#1. individualCount
+#WHY: for occurrence counts for my abundance
+sugar_climate_clean <- sugar_climate_clean %>%
+  mutate(individualCount = ifelse(is.na(individualCount), 1, individualCount))
+
+```
+
+
+#CREATING MY LONGITUDINAL SLICES 
+```{r}
+#WHY: for my model, for my time series, and for my abundance measurements 
+#HOW: creating bins 
+
+#I made three different versions of the code, as right now I am not sure how big I want my bins to be 
+
+#10-degree bins
+#sugar_climate_clean <- sugar_climate_clean %>%
+#  mutate(longitude_band = floor(decimalLongitude / 10) * 10)
+
+#5-degree bins
+sugar_climate_clean <- sugar_climate_clean %>%
+  mutate(longitude_band = floor(decimalLongitude / 5) * 5)
+
+#2-degree bins 
+#sugar_climate_clean <- sugar_climate_clean %>%
+#  mutate(longitude_band = floor(decimalLongitude / 2) * 2)
+
+```
+
+#CREATING MY ABUNDANCE VARIABLE
+```{r}
+#Abundance as a variable in EDA was defined as the sum of occurrences in a state. While that worked for then, I want to make that stronger and calculate the abundance as the sum of occurrences/Individual counts. Additionally, I can do a sum abundance measurement and a relative abundance measurement. 
+
+#WHY I'M NOT USING STATE ANYMORE: sampling bias. Ex.: people in New York are more likely to sample that people in South Carolina (something like that but mroe fleshed out).
+
+abundance_data <- sugar_climate_clean %>%
+  group_by(longitude_band, year) %>%
+  summarise(
+    abundance = sum(individualCount, na.rm = TRUE),
+    occurrences = n(),
+    decimalLatitude = mean(decimalLatitude, na.rm = TRUE),
+    decimalLongitude = mean(decimalLongitude, na.rm = TRUE),
+    elevation = mean(elevation, na.rm = TRUE),
+    BIO1 = mean(BIO1, na.rm = TRUE),
+    BIO2 = mean(BIO2, na.rm = TRUE),
+    BIO3 = mean(BIO3, na.rm = TRUE),
+    BIO4 = mean(BIO4, na.rm = TRUE),
+    BIO5 = mean(BIO5, na.rm = TRUE),
+    BIO6 = mean(BIO6, na.rm = TRUE),
+    BIO7 = mean(BIO7, na.rm = TRUE),
+    BIO8 = mean(BIO8, na.rm = TRUE),
+    BIO9 = mean(BIO9, na.rm = TRUE),
+    BIO10 = mean(BIO10, na.rm = TRUE),
+    BIO11 = mean(BIO11, na.rm = TRUE),
+    BIO12 = mean(BIO12, na.rm = TRUE),
+    BIO13 = mean(BIO13, na.rm = TRUE),
+    BIO14 = mean(BIO14, na.rm = TRUE),
+    BIO15 = mean(BIO15, na.rm = TRUE),
+    BIO16 = mean(BIO16, na.rm = TRUE),
+    BIO17 = mean(BIO17, na.rm = TRUE),
+    BIO18 = mean(BIO18, na.rm = TRUE),
+    BIO19 = mean(BIO19, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+
+#with abundance and the longitudinal slices, we also need to 
+
+#1. add abundance as a target variable in the data set
+#2. figure out how to segment abundance based on longitudinal lines
+
+
+
+#3. log transformation of abundance (helps model and skew of variable)
+```
+
+
+
+#for missing counts 
+sugar_climate_clean <- sugar_climate_clean %>%
+  mutate(individualCount = ifelse(is.na(individualCount), 1, individualCount))
+  
+#creating abundance after cleaning 
+sugar_climate_clean <- sugar_climate_clean %>%
+  group_by(decimalLatitude, decimalLongitude) %>%
+  mutate(abundance = sum(individualCount, na.rm = TRUE)) %>%
+  ungroup()
+
+
+library(dplyr)
+library(zoo)
+
+# Make sure data are ordered correctly by location and time
+df <- df %>%
+  arrange(location_id, date) %>%
+  group_by(location_id) %>%
+  
+  # 1-step and 3-step lagged variables
+  mutate(
+    temp_lag_1   = lag(bio1, 1),
+    temp_lag_3   = lag(bio1, 3),
+    precip_lag_1 = lag(bio12, 1)
+  ) %>%
+  
+  # Rolling features
+  mutate(
+    temp_rolling_mean_3 = rollmean(bio1, k = 3, fill = NA, align = "right"),
+    precip_rolling_sum_6 = rollapply(bio12, width = 6, FUN = sum, fill = NA, align = "right")
+  ) %>%
+  ungroup()
+  
+  
+  
+  # Example: scale selected numeric variables
+df <- df %>%
+  mutate(
+    bio1_scaled = as.numeric(scale(bio1)),
+    bio12_scaled = as.numeric(scale(bio12)),
+    bio4_scaled = as.numeric(scale(bio4))
+  )
+  
+  
+  
+  df <- df %>%
+  mutate(
+    bio12_log = log1p(bio12)
+  )
+  
+  
+  
+
+
+df <- df %>%
+  mutate(
+    month = as.numeric(format(date, "%m")),
+    season = case_when(
+      month %in% c(12, 1, 2) ~ "Winter",
+      month %in% c(3, 4, 5)  ~ "Spring",
+      month %in% c(6, 7, 8)  ~ "Summer",
+      month %in% c(9, 10, 11) ~ "Fall"
+    )
+  )
+
+
+
+
+df_clean <- df %>%
+  filter(
+    !is.na(temp_lag_1),
+    !is.na(temp_lag_3),
+    !is.na(precip_lag_1),
+    !is.na(temp_rolling_mean_3),
+    !is.na(precip_rolling_sum_6)
+  )
+
+
+
+
+
+
+
    
 
 
