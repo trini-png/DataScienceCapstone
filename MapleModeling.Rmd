@@ -599,7 +599,7 @@ colSums(is.na(sugar_climate_clean))
 #ENCODING VARIABLES
 ```{r}
 #1. individualCount
-#WHY: for occurrence counts for my abundance
+#WHY: for occurrence counts for my abundance because each row counts as an occurrence
 sugar_climate_clean <- sugar_climate_clean %>%
   mutate(individualCount = ifelse(is.na(individualCount), 1, individualCount))
 
@@ -633,6 +633,8 @@ sugar_climate_clean <- sugar_climate_clean %>%
 
 #WHY I'M NOT USING STATE ANYMORE: sampling bias. Ex.: people in New York are more likely to sample that people in South Carolina (something like that but mroe fleshed out).
 
+#this code creates the modeling table (essentially, it is aggregating the data by both  longitude_band and year into a useable format for future modeling)
+
 abundance_data <- sugar_climate_clean %>%
   group_by(longitude_band, year) %>%
   summarise(
@@ -663,102 +665,46 @@ abundance_data <- sugar_climate_clean %>%
     .groups = "drop"
   )
 
+head(abundance_data)
 
-#with abundance and the longitudinal slices, we also need to 
+
 
 #1. add abundance as a target variable in the data set
 #2. figure out how to segment abundance based on longitudinal lines
-
-
-
 #3. log transformation of abundance (helps model and skew of variable)
+```
+
+#CREATING RELATIVE ABUNDANCE
+```{r}
+abundance_data <- abundance_data %>%
+  group_by(year) %>%
+  mutate(relative_abundance = abundance / sum(abundance, na.rm = TRUE)) %>%
+  ungroup()
+```
+
+#LOG TRANSFORMING MY ABUNDANCE VARIABLE
+```{r}
+abundance_data <- abundance_data %>%
+  mutate(log_abundance = log1p(abundance))
 ```
 
 
 
-#for missing counts 
-sugar_climate_clean <- sugar_climate_clean %>%
-  mutate(individualCount = ifelse(is.na(individualCount), 1, individualCount))
-  
-#creating abundance after cleaning 
-sugar_climate_clean <- sugar_climate_clean %>%
-  group_by(decimalLatitude, decimalLongitude) %>%
-  mutate(abundance = sum(individualCount, na.rm = TRUE)) %>%
-  ungroup()
-
-
-library(dplyr)
-library(zoo)
-
-# Make sure data are ordered correctly by location and time
-df <- df %>%
-  arrange(location_id, date) %>%
-  group_by(location_id) %>%
-  
-  # 1-step and 3-step lagged variables
-  mutate(
-    temp_lag_1   = lag(bio1, 1),
-    temp_lag_3   = lag(bio1, 3),
-    precip_lag_1 = lag(bio12, 1)
-  ) %>%
-  
-  # Rolling features
-  mutate(
-    temp_rolling_mean_3 = rollmean(bio1, k = 3, fill = NA, align = "right"),
-    precip_rolling_sum_6 = rollapply(bio12, width = 6, FUN = sum, fill = NA, align = "right")
-  ) %>%
-  ungroup()
-  
-  
-  
-  # Example: scale selected numeric variables
-df <- df %>%
-  mutate(
-    bio1_scaled = as.numeric(scale(bio1)),
-    bio12_scaled = as.numeric(scale(bio12)),
-    bio4_scaled = as.numeric(scale(bio4))
-  )
-  
-  
-  
-  df <- df %>%
-  mutate(
-    bio12_log = log1p(bio12)
-  )
-  
-  
-  
-
-
-df <- df %>%
-  mutate(
-    month = as.numeric(format(date, "%m")),
-    season = case_when(
-      month %in% c(12, 1, 2) ~ "Winter",
-      month %in% c(3, 4, 5)  ~ "Spring",
-      month %in% c(6, 7, 8)  ~ "Summer",
-      month %in% c(9, 10, 11) ~ "Fall"
-    )
-  )
 
 
 
-
-df_clean <- df %>%
-  filter(
-    !is.na(temp_lag_1),
-    !is.na(temp_lag_3),
-    !is.na(precip_lag_1),
-    !is.na(temp_rolling_mean_3),
-    !is.na(precip_rolling_sum_6)
-  )
-
-
-
+PLAN FOR 4/12:
+1. Create a time-lagged abundance variable within each longitude band.
+2. Generate additional derived variables such as climate ranges and interactions.
+3. Reassess and handle any remaining missing values in the dataset.
+4. Finalize the target variable for modeling.
+5. Evaluate and confirm the appropriate longitude band size.
+6. Perform a train-test split on the aggregated dataset.
+7. Impute any remaining missing predictor values.
+8. Normalize and scale numeric variables for modeling.
+9. START WRITING THE REPORT (you already have a headstart with the "WHYs" here)
 
 
 
-
-   
 
 
