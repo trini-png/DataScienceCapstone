@@ -25,8 +25,15 @@ suitability change with the varying climate?
   - 4/2/26: added and combined all of my data, started thinking about cleaning and EDA
   - 4/3/26: fixed a probelm with the join on my datasets, made my first table, found 5 sources for my intro, mapped out all of my graphs and tables for EDA
   - 4/6/26: finished all of my graphs and tables
-  -
-  -
-  -
-
+    
+# Week 4: Data Preprocessing
+  - 4/11/26: Loaded all 19 WorldClim raster files, combined them into a stack, and labeled them BIO1–BIO19.
+        - Combined GBIF and WorldClim variables into a new, cleaned dataset
+        - Removed unnecessary GBIF metadata and redundant variables to reduce noise in the dataset.
+        - Assessed missing values across all variables using column-wise NA counts.
+        - Replaced missing values in individualCount with 1 to reflect occurrence presence.
+        - Created longitude-based bins using 5-degree intervals (also have code for 2 and 10).
+        - Aggregated the data by longitude band and year to create a modeling dataset.
+        - Calculated total abundance and occurrence counts within each group.
+  - 4/12/26:
   
