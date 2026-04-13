@@ -25,6 +25,7 @@ library(tidyr)
 library(psych)  ##for summary stats table
 library(flextable)  ##helps me take my tables from here to word (they are large)
 library(knitr)
+library(caret)  ##for my correlation stuff in preprocessing 
 
 ```
 
@@ -785,6 +786,9 @@ abundance_data <- abundance_data %>%
 abundance_data <- abundance_data %>%
   mutate(across(where(is.numeric), ~ ifelse(is.na(.), median(., na.rm = TRUE), .)))
 
+#justify
+#assess your imputation by calculating percentage (low) and comparing bf and after (prove no shift)
+
 #checking again
 colSums(is.na(abundance_data))
 ```
@@ -905,7 +909,7 @@ test_data <- test_data %>%
 #selecting numeric predictor columns only
 numeric_cols <- train_data %>%
   select(where(is.numeric)) %>%
-  select(-abundance, -relative_abundance, -log_abundance) %>%
+  select(-abundance, -relative_abundance, -log_abundance, -longitude_band) %>%
   colnames()
 
 #storing training means and sds
@@ -920,20 +924,58 @@ test_data[, numeric_cols] <- scale(test_data[, numeric_cols], center = train_mea
 
 #checking results
 summary(train_data[, numeric_cols])
-summary(test_data[, numeric_cols])
 
 ```
+
+
+Additional 11th-hour cleaning 
+Removing highly correlated variables 
+```{r}
+#remove columns that are all NA
+train_data <- train_data %>%
+  select(where(~ !all(is.na(.))))
+
+#define numeric predictors
+numeric_cols <- train_data %>%
+  select(where(is.numeric)) %>%
+  select(-abundance, -relative_abundance, -log_abundance) %>%
+  colnames()
+
+#keeping  only the columns with no NA
+train_numeric <- train_data[, numeric_cols] %>%
+  select(where(~ all(!is.na(.))))
+
+#correlation matrix
+cor_matrix <- cor(train_numeric, use = "complete.obs")
+
+#remove highly correlated variables
+high_corr <- findCorrelation(cor_matrix, cutoff = 0.9)
+
+numeric_cols_reduced <- colnames(train_numeric)[-high_corr]
+
+#final dataset
+train_data <- train_data %>%
+  select(all_of(numeric_cols_reduced), log_abundance)
+
+
+
+
+#Removing extreme outliers 
+#WHY: so that extreme outliers don't impact my models 
+abundance_data <- abundance_data %>%
+  filter(abundance < quantile(abundance, 0.99))
+
+```
+
 
 ```{r}
 #looking at all my data together 
+str(train_data)
+summary(train_data)
 
-View(abundance_data)
+#View(abundance_data)
 View(train_data)
-View(test_data)
+#View(test_data)
 ```
-
-
-
-
 
 
