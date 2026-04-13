@@ -496,28 +496,28 @@ sugar_clean <- sugar_clean %>%
 ```
 
 
-
 ```{r}
 
-# make spatial points from cleaned GBIF data
+#making lat long points from cleaned GBIF data
 sugar_points <- vect(
   sugar_clean,
   geom = c("decimalLongitude", "decimalLatitude"),
   crs = "EPSG:4326"
 )
 
-# match CRS if needed
+#matching CRS
 if (!same.crs(sugar_points, climate_stack_ALL)) {
   sugar_points <- project(sugar_points, crs(climate_stack_ALL))
 }
 
-# extract all 19 BIO values to the GBIF points
+#extracting all 19 BIO values to the GBIF points
 climate_extract_19 <- terra::extract(climate_stack_ALL, sugar_points)
 
-# combine GBIF + extracted climate values
+#combining GBIF + extracted climate values
 sugar_climate_clean <- bind_cols(sugar_clean, climate_extract_19[, -1])
 
 ```
+
 
 ```{r}
 #cleaning my data 
@@ -581,21 +581,6 @@ head(sugar_climate_clean)
 ```
 
 
-
-
-
-
-
-#CLEANING MISSING VALUES
-```{r}
-#cleaning up missing values in my GBIF dataset
-#Firstly, it makes sense that there are a lot of missing values, as GBIF occurrences are derived from a person's sample, with said person typically not having access to or including all of the relevant pieces of information. 
-
-#checking the columns for missingness
-colSums(is.na(sugar_climate_clean))
-
-```
-
 #ENCODING VARIABLES
 ```{r}
 #1. individualCount
@@ -626,6 +611,7 @@ sugar_climate_clean <- sugar_climate_clean %>%
 #  mutate(longitude_band = floor(decimalLongitude / 2) * 2)
 
 ```
+
 
 #CREATING MY ABUNDANCE VARIABLE
 ```{r}
@@ -674,6 +660,7 @@ head(abundance_data)
 #3. log transformation of abundance (helps model and skew of variable)
 ```
 
+
 #CREATING RELATIVE ABUNDANCE
 ```{r}
 abundance_data <- abundance_data %>%
@@ -681,6 +668,7 @@ abundance_data <- abundance_data %>%
   mutate(relative_abundance = abundance / sum(abundance, na.rm = TRUE)) %>%
   ungroup()
 ```
+
 
 #LOG TRANSFORMING MY ABUNDANCE VARIABLE
 ```{r}
@@ -691,18 +679,258 @@ abundance_data <- abundance_data %>%
 
 
 
-
-
 PLAN FOR 4/12:
-1. Create a time-lagged abundance variable within each longitude band.
-2. Generate additional derived variables such as climate ranges and interactions.
-3. Reassess and handle any remaining missing values in the dataset.
-4. Finalize the target variable for modeling.
-5. Evaluate and confirm the appropriate longitude band size.
+1. Create a time-lagged abundance variable within each longitude band
+WHY: for the temporal aspect of my model, to model abundance over time
+```{r}
+#creating time-lagged abundance variables within each longitude band
+
+#What is actually happening here is that
+
+
+abundance_data <- abundance_data %>%
+  arrange(longitude_band, year) %>%
+  group_by(longitude_band) %>%
+  mutate(
+    lag_abundance = lag(abundance, 1),
+    lag_log_abundance = lag(log_abundance, 1),
+    lag_relative_abundance = lag(relative_abundance, 1)
+  ) %>%
+  ungroup()
+
+head(abundance_data)
+
+```
+
+2. Generate additional derived variables such as climate ranges and interactions
+WHY: to have more that can be analyzed in the model, to provide more model insights
+I did this by combing mainly the BIO variables to provide more data regarding the preferred ranges of the species
+```{r}
+#creating more BIO variables
+abundance_data <- abundance_data %>%
+  mutate(
+    temp_range = BIO5 - BIO6,
+    temp_wet_quarter_diff = BIO8 - BIO9,
+    precip_range = BIO16 - BIO14,
+    precip_seasonality = BIO15,
+    year_centered = year - mean(year, na.rm = TRUE)
+  )
+
+head(abundance_data)
+summary(abundance_data[, c("temp_range", "temp_wet_quarter_diff", "precip_range", 
+                           "precip_seasonality", "year_centered")])
+
+
+#creating more GBIF variables
+
+#WHY: I tried creating latitudinal slices as well (in case I wanted to use those instead of or with my longitudinal slices to create a grid. Plus the code was the same). 
+
+#abundance_data <- abundance_data %>%
+#  mutate(latitude_band = floor(decimalLatitude / 5) * 5)
+
+
+
+
+#WHY: this variable can measure how spread out my occurrences are and can allow me to look at the range of the species (as well as if it is expanding or being restricted)
+abundance_data <- abundance_data %>%
+  mutate(
+    center_lat = mean(decimalLatitude, na.rm = TRUE),
+    center_lon = mean(decimalLongitude, na.rm = TRUE),
+    distance_from_center = sqrt((decimalLatitude - center_lat)^2 +
+                                (decimalLongitude - center_lon)^2)
+  )
+
+
+#WHY: this variable will help me look at changes in growth/decline patterns and serve as a predictor 
+abundance_data <- abundance_data %>%
+  arrange(longitude_band, year) %>%
+  group_by(longitude_band) %>%
+  mutate(abundance_change = abundance - lag(abundance)) %>%
+  ungroup()
+
+
+#WHY: this variable controls for the sampling effort and relps reduce bias 
+abundance_data <- abundance_data %>%
+  mutate(density = abundance / occurrences)
+
+```
+
+3. Missing values in the dataset
+WHY: missing values will impact the models 
+```{r}
+#checking for missing 
+colSums(is.na(abundance_data))
+```
+```{r}
+#how I am dealing with the missing variables 
+# 1.Lagging my variable creates a missing value in the data set, and the easiest way to deal with those is to remove them.
+
+#removing rows with missing lag variables
+abundance_data <- abundance_data %>%
+  filter(
+    !is.na(lag_abundance),
+    !is.na(lag_log_abundance),
+    !is.na(lag_relative_abundance)
+  )
+
+#checking missing values
+#colSums(is.na(abundance_data))
+
+
+
+# 2. There isn't a lot of missing stuff after that so imputation can be done based on the median to fill those points in so the data is comparable. 
+
+#median imputation for remaining numeric missing values
+abundance_data <- abundance_data %>%
+  mutate(across(where(is.numeric), ~ ifelse(is.na(.), median(., na.rm = TRUE), .)))
+
+#checking again
+colSums(is.na(abundance_data))
+```
+
+4. Finalizing the target variable for modeling.
+```{r}
+# It is important to know in preprocessing which variable is my target. Abundance is my target variables, but we log transformed it before so the new target is log_abundance
+
+# Outlining them now will help me to frame my mindset and my approach to the data.
+# The remaining abundance variables ("abundance" and "relative_abundance") will serve as secondary ways to evaluate abundance in my dataset and help with my interpretation.
+
+#my target variable
+y <- abundance_data$log_abundance
+
+#my model predictors 
+x <- abundance_data %>%
+  select(-abundance, -relative_abundance, -log_abundance)
+```
+
+
+5. Working on my longitudinal bands 
+```{r}
+#WHY: I made the code for 2-, 5-, and 10-year bands so I could have the option to choose but it is better to evaluate how each one performs and choose one to move forward with for my model.
+
+#10 degree
+sugar_climate_clean_10 <- sugar_climate_clean %>%
+  mutate(longitude_band = floor(decimalLongitude / 10) * 10)
+
+abundance_data_10 <- sugar_climate_clean_10 %>%
+  mutate(individualCount = ifelse(is.na(individualCount), 1, individualCount)) %>%
+  group_by(longitude_band, year) %>%
+  summarise(
+    abundance = sum(individualCount, na.rm = TRUE),
+    occurrences = n(),
+    .groups = "drop"
+  )
+
+nrow(abundance_data_10)
+summary(abundance_data_10$abundance)
+
+
+#5 year 
+sugar_climate_clean_5 <- sugar_climate_clean %>%
+  mutate(longitude_band = floor(decimalLongitude / 5) * 5)
+
+abundance_data_5 <- sugar_climate_clean_5 %>%
+  mutate(individualCount = ifelse(is.na(individualCount), 1, individualCount)) %>%
+  group_by(longitude_band, year) %>%
+  summarise(
+    abundance = sum(individualCount, na.rm = TRUE),
+    occurrences = n(),
+    .groups = "drop"
+  )
+
+nrow(abundance_data_5)
+summary(abundance_data_5$abundance)
+
+
+#2 year 
+sugar_climate_clean_2 <- sugar_climate_clean %>%
+  mutate(longitude_band = floor(decimalLongitude / 2) * 2)
+
+abundance_data_2 <- sugar_climate_clean_2 %>%
+  mutate(individualCount = ifelse(is.na(individualCount), 1, individualCount)) %>%
+  group_by(longitude_band, year) %>%
+  summarise(
+    abundance = sum(individualCount, na.rm = TRUE),
+    occurrences = n(),
+    .groups = "drop"
+  )
+
+nrow(abundance_data_2)
+summary(abundance_data_2$abundance)
+
+
+#comparing them with histograms 
+hist(abundance_data_10$abundance, main = "10-degree bands", xlab = "Abundance")
+hist(abundance_data_5$abundance, main = "5-degree bands", xlab = "Abundance")
+hist(abundance_data_2$abundance, main = "2-degree bands", xlab = "Abundance")
+```
+CONCLUSION: There isn't really a difference in the abundance distribution across the degree segments so I'm probably gonna use 5-year. 
+
+
+
 6. Perform a train-test split on the aggregated dataset.
-7. Impute any remaining missing predictor values.
+WHY: all models have training and test sets, no biggie 
+```{r}
+set.seed(123)
+
+n <- nrow(abundance_data)
+train_index <- sample(seq_len(n), size = 0.8 * n)
+
+train_data <- abundance_data[train_index, ]
+test_data  <- abundance_data[-train_index, ]
+
+#checking sizes
+nrow(train_data)
+nrow(test_data)
+```
+
+7. Impute any remaining missing predictor values
+WHY: same reasoning as earlier, will affect model performance
+```{r}
+#imputing numeric missing values in training data
+train_data <- train_data %>%
+  mutate(across(where(is.numeric), ~ ifelse(is.na(.), median(., na.rm = TRUE), .)))
+
+#imputing numeric missing values in test data
+test_data <- test_data %>%
+  mutate(across(where(is.numeric), ~ ifelse(is.na(.), median(., na.rm = TRUE), .)))
+
+```
+
 8. Normalize and scale numeric variables for modeling.
-9. START WRITING THE REPORT (you already have a headstart with the "WHYs" here)
+```{r}
+#I am scaling everything by log_abundance (my target)
+
+#selecting numeric predictor columns only
+numeric_cols <- train_data %>%
+  select(where(is.numeric)) %>%
+  select(-abundance, -relative_abundance, -log_abundance) %>%
+  colnames()
+
+#storing training means and sds
+train_means <- sapply(train_data[, numeric_cols], mean, na.rm = TRUE)
+train_sds   <- sapply(train_data[, numeric_cols], sd, na.rm = TRUE)
+
+#scaling training data
+train_data[, numeric_cols] <- scale(train_data[, numeric_cols], center = train_means, scale = train_sds)
+
+#scaling test data using training means and sds
+test_data[, numeric_cols] <- scale(test_data[, numeric_cols], center = train_means, scale = train_sds)
+
+#checking results
+summary(train_data[, numeric_cols])
+summary(test_data[, numeric_cols])
+
+```
+
+```{r}
+#looking at all my data together 
+
+View(abundance_data)
+View(train_data)
+View(test_data)
+```
+
 
 
 
