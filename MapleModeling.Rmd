@@ -11,6 +11,15 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ## R Markdown
+```{r}
+#library bank
+library(caret)
+library(lmtest)
+library(glmnet)
+
+```
+
+
 
 ##DATA DICTIONARY 
 
@@ -69,6 +78,7 @@ colSums(is.na(train_data))
 ```
 
 
+
 BASELINE MODEL #1: Linear Regression
 
 WHY: A baseline linear regression model will allow me to:
@@ -76,21 +86,35 @@ WHY: A baseline linear regression model will allow me to:
         2. serve as a benchnark model before moving on to more complex ones. 
         
 ```{r}
-# -------------------------------
-# LINEAR REGRESSION MODEL
-# -------------------------------
+#LINEAR REGRESSION MODEL
 
-# fit model
+#fitting the  model
 lm_model <- lm(log_abundance ~ ., data = train_data)
-
-# model summary
 summary(lm_model)
 
-# predictions
+
+#cross-validation
+set.seed(123)
+
+train_control <- trainControl(
+  method = "cv",
+  number = 5
+)
+
+lm_cv <- train(
+  log_abundance ~ .,
+  data = train_data,
+  method = "lm",
+  trControl = train_control
+)
+
+lm_cv
+
+#predictions
 lm_train_pred <- predict(lm_model, newdata = train_data)
 lm_test_pred  <- predict(lm_model, newdata = test_data)
 
-# evaluation metrics
+#evaluation metrics
 rmse <- function(actual, predicted) {
   sqrt(mean((actual - predicted)^2))
 }
@@ -99,20 +123,35 @@ r2 <- function(actual, predicted) {
   cor(actual, predicted)^2
 }
 
-# training performance
+#training performance
 lm_train_rmse <- rmse(train_data$log_abundance, lm_train_pred)
 lm_train_r2   <- r2(train_data$log_abundance, lm_train_pred)
 
-# testing performance
+#testing performance
 lm_test_rmse <- rmse(test_data$log_abundance, lm_test_pred)
 lm_test_r2   <- r2(test_data$log_abundance, lm_test_pred)
 
-# print results
+#looking at my results 
 lm_train_rmse
 lm_train_r2
 lm_test_rmse
 lm_test_r2
+
+
+
+#Residuals vs fitted plot: checks linearity and equal variance
+#Q-Q plot: checks normality of residuals
+#Scale-location plot: checks homoscedasticity
+plot(lm_model)
+
+#durbin watson
+dwtest(lm_model)
 ```
+
+
+
+
+
 
 
 
@@ -120,28 +159,25 @@ BASELINE MODEL #2: Ridge Regression
 
 WHY: Ridge regression is a regularized linear model that will 
         1. take into account the multicollinearity present in my data set (especially so among the BIO variables)
+        2. as something to compare to the linear model
 
 ```{r}
-# -------------------------------
-# RIDGE REGRESSION MODEL - FIXED
-# -------------------------------
+#RIDGE REGRESSION MODEL
 
-library(glmnet)
-
-# make sure train and test have same columns
+#making sure that the train and test have same columns
 common_cols <- intersect(colnames(train_data), colnames(test_data))
 
 train_ridge <- train_data[, common_cols]
 test_ridge  <- test_data[, common_cols]
 
-# create matrices
+#create matrices
 x_train <- model.matrix(log_abundance ~ ., data = train_ridge)[, -1]
 y_train <- train_ridge$log_abundance
 
 x_test <- model.matrix(log_abundance ~ ., data = test_ridge)[, -1]
 y_test <- test_ridge$log_abundance
 
-# force test matrix to match train matrix columns
+#force test matrix to match train matrix columns
 missing_cols <- setdiff(colnames(x_train), colnames(x_test))
 
 for (col in missing_cols) {
@@ -157,7 +193,7 @@ if (length(extra_cols) > 0) {
 
 x_test <- x_test[, colnames(x_train)]
 
-# cross-validated ridge regression
+#cross-validated ridge regression
 set.seed(123)
 
 ridge_cv <- cv.glmnet(
@@ -170,7 +206,10 @@ ridge_cv <- cv.glmnet(
 best_lambda <- ridge_cv$lambda.min
 best_lambda
 
-# final ridge model
+#plotting the cross-validation
+plot(ridge_cv)
+
+#final ridge model
 ridge_model <- glmnet(
   x_train,
   y_train,
@@ -178,11 +217,11 @@ ridge_model <- glmnet(
   lambda = best_lambda
 )
 
-# predictions
+#predictions
 ridge_train_pred <- predict(ridge_model, s = best_lambda, newx = x_train)
 ridge_test_pred  <- predict(ridge_model, s = best_lambda, newx = x_test)
 
-# metrics
+#metrics
 rmse <- function(actual, predicted) {
   sqrt(mean((actual - predicted)^2))
 }
@@ -201,6 +240,25 @@ ridge_train_rmse
 ridge_train_r2
 ridge_test_rmse
 ridge_test_r2
+
+#testing assumptions with residuals plotting
+ridge_residuals <- y_train - ridge_train_pred
+
+ridge_diagnostics <- data.frame(
+  fitted = ridge_train_pred,
+  residuals = ridge_residuals
+)
+
+
+#qqplot to test normalcy (distribution)
+qqnorm(ridge_residuals)
+qqline(ridge_residuals, col = "red")
+
+
+#durbin-watson
+ridge_lm_for_dw <- lm(ridge_residuals ~ ridge_train_pred)
+dwtest(ridge_lm_for_dw)
+
 ```
 
 
