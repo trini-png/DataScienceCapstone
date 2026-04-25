@@ -35,5 +35,14 @@ suitability change with the varying climate?
         - Created longitude-based bins using 5-degree intervals (also have code for 2 and 10).
         - Aggregated the data by longitude band and year to create a modeling dataset.
         - Calculated total abundance and occurrence counts within each group.
-  - 4/12/26:
-  
+
+  # Week 6: Baseline Model Creation
+  - 4/22/26: combined data dictionaries and explained why I chose the model(s) I did (and why I chose to do 2 at this juncture)
+  - 4/23/26: coded the linear and ridge regression models and evaluateed model assumptions
+  - 4/24/26: finished all of my graphs and tables, finished my write-up, handed it in
+
+  # Week 7: Hyperparameter Tuning (and finishing my remaining models)
+  - 4/26/26: 
+  - 4/27/26: 
+  - 4/28/26: 
+  - 4/29/26: 
