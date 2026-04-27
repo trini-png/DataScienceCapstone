@@ -16,6 +16,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(caret)
 library(lmtest)
 library(glmnet)
+library(randomForest)
 
 ```
 
@@ -261,11 +262,172 @@ dwtest(ridge_lm_for_dw)
 
 ```
 
+MODEL #3: Lasso  
+WHY: Lasso is a regularized linear model that will 
+        1. shrinks coefficients exactly to zero 
+        2. also looks at multicollinearity 
+        3. simpler than  the ridge regression (easier to interpret)
+        
+```{r}
+rmse <- function(actual, predicted) {
+  actual <- as.numeric(actual)
+  predicted <- as.numeric(predicted)
+  sqrt(mean((actual - predicted)^2))
+}
 
-FUTURE: Random Forest
-        Lasso
+r2 <- function(actual, predicted) {
+  actual <- as.numeric(actual)
+  predicted <- as.numeric(predicted)
+  cor(actual, predicted)^2
+}
+
+#target variables
+y_train <- train_data$log_abundance
+y_test  <- test_data$log_abundance
+
+#predictor data frames
+train_x_df <- train_data %>%
+  select(-log_abundance)
+
+test_x_df <- test_data %>%
+  select(-log_abundance)
+
+#keep only columns that appear in both train and test
+common_cols <- intersect(colnames(train_x_df), colnames(test_x_df))
+
+train_x_df <- train_x_df[, common_cols]
+test_x_df  <- test_x_df[, common_cols]
+
+#create model matrices using the same columns
+x_train <- model.matrix(~ ., data = train_x_df)[, -1]
+x_test  <- model.matrix(~ ., data = test_x_df)[, -1]
+
+#force test matrix to match train matrix exactly
+missing_cols <- setdiff(colnames(x_train), colnames(x_test))
+
+if (length(missing_cols) > 0) {
+  missing_matrix <- matrix(
+    0,
+    nrow = nrow(x_test),
+    ncol = length(missing_cols)
+  )
+  colnames(missing_matrix) <- missing_cols
+  x_test <- cbind(x_test, missing_matrix)
+}
+
+extra_cols <- setdiff(colnames(x_test), colnames(x_train))
+
+if (length(extra_cols) > 0) {
+  x_test <- x_test[, !(colnames(x_test) %in% extra_cols)]
+}
+
+x_test <- x_test[, colnames(x_train)]
+
+#check dimensions before modeling
+dim(x_train)
+dim(x_test)
+length(y_train)
+length(y_test)
+
+#cross-validated Lasso
+set.seed(123)
+
+lasso_cv <- cv.glmnet(
+  x_train,
+  y_train,
+  alpha = 1,
+  nfolds = 5
+)
+
+best_lambda_lasso <- lasso_cv$lambda.min
+best_lambda_lasso
+
+plot(lasso_cv)
+
+#fit final Lasso model
+lasso_model <- glmnet(
+  x_train,
+  y_train,
+  alpha = 1,
+  lambda = best_lambda_lasso
+)
+
+#predictions
+lasso_train_pred <- as.numeric(predict(lasso_model, s = best_lambda_lasso, newx = x_train))
+lasso_test_pred  <- as.numeric(predict(lasso_model, s = best_lambda_lasso, newx = x_test))
+
+#check prediction lengths
+length(lasso_train_pred)
+length(lasso_test_pred)
+length(y_train)
+length(y_test)
+
+#metrics
+lasso_train_rmse <- rmse(y_train, lasso_train_pred)
+lasso_train_r2   <- r2(y_train, lasso_train_pred)
+
+lasso_test_rmse <- rmse(y_test, lasso_test_pred)
+lasso_test_r2   <- r2(y_test, lasso_test_pred)
+
+lasso_train_rmse
+lasso_train_r2
+lasso_test_rmse
+lasso_test_r2
+
+#selected variables
+coef(lasso_model, s = best_lambda_lasso)
+```
 
 
 
+MODEL #4: Random Forest   
+WHY: Random forest is a non-linear model that will 
+        1. looks at nonlinear relationships and interactions
+        2. good for ecology
+        3. will let me see which features are most important 
+        4. robust aginst overfitting (because of the many trees)
+        
+```{r}
+rmse <- function(actual, predicted) {
+  sqrt(mean((actual - predicted)^2))
+}
+
+r2 <- function(actual, predicted) {
+  cor(actual, predicted)^2
+}
+
+set.seed(123)
+
+rf_model <- randomForest(
+  log_abundance ~ .,
+  data = train_data,
+  ntree = 500,
+  mtry = floor(sqrt(ncol(train_data) - 1)),
+  importance = TRUE
+)
+
+rf_model
+
+#predictions
+rf_train_pred <- predict(rf_model, newdata = train_data)
+rf_test_pred  <- predict(rf_model, newdata = test_data)
+
+#metrics
+rf_train_rmse <- rmse(train_data$log_abundance, rf_train_pred)
+rf_train_r2   <- r2(train_data$log_abundance, rf_train_pred)
+
+rf_test_rmse <- rmse(test_data$log_abundance, rf_test_pred)
+rf_test_r2   <- r2(test_data$log_abundance, rf_test_pred)
+
+rf_train_rmse
+rf_train_r2
+rf_test_rmse
+rf_test_r2
+
+#variable importance
+importance(rf_model)
+varImpPlot(rf_model)
+```
 
 
+        
