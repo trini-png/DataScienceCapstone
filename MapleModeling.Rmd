@@ -379,6 +379,8 @@ coef(lasso_model, s = best_lambda_lasso)
 ```
 
 
+^^ I did this before reading all of the comments on the Baseline report but will be disregarding for further analysis 
+
 
 MODEL #4: Random Forest   
 WHY: Random forest is a non-linear model that will 
@@ -430,4 +432,211 @@ varImpPlot(rf_model)
 ```
 
 
-        
+## ADRESSING ISSUES/CONCERNS WITH MY PROJECT (BASED ON FEEDBACK)
+
+
+1. I know you wouldn't have seen my EDA comments about changing abundance to "occurrence" or something similar yet, but here's another reminder. :) IMPORTANT: My biggest concern is over replacing missing individualCount values with 1. Why not 0? Or even just doing sums that ignore NA? This needs much stronger justification because currently it assumes absence of information equals a single occurrence, which will very likely bias abundance estimates.
+
+
+PROBLEM: replacing missing values in individualCount with 1 
+WHY: assuming no info is an occurrence
+
+SOLUTION: changing the variable from "abundance" to "occurrence_count"
+WHY: this will elminate the assumption of an occurrence and serve as a more accurate quantification based on the true occurrences
+```{r}
+#making my response variable based on occurrences 
+sugar_climate_clean <- sugar_climate_clean %>%
+  mutate(occurrence_record = 1)
+
+#putting it together 
+occurrence_data <- occurrence_data %>%
+  arrange(longitude_band, year) %>%
+  group_by(longitude_band) %>%
+  mutate(
+    lag_occurrence_count = lag(occurrence_count, 1),
+    lag_log_occurrence_count = lag(log_occurrence_count, 1),
+    lag_relative_occurrence = lag(relative_occurrence, 1),
+    occurrence_change = occurrence_count - lag_occurrence_count
+  ) %>%
+  ungroup() %>%
+  mutate(
+    temp_range = BIO5 - BIO6,
+    precip_range = BIO16 - BIO14,
+    precip_seasonality = BIO15,
+    year_centered = year - mean(year, na.rm = TRUE)
+  ) %>%
+  filter(!is.na(lag_occurrence_count))
+
+
+
+
+#new train and test data splits (temporal split)
+train_data <- occurrence_data %>%
+  filter(year < 2015)
+
+test_data <- occurrence_data %>%
+  filter(year >= 2015)
+
+
+
+
+#adding the spatial split 
+set.seed(123)
+
+#get unique longitude bands
+unique_bands <- unique(occurrence_data$longitude_band)
+
+#randomly assign 80% of longitude bands to training
+train_bands <- sample(
+  unique_bands,
+  size = floor(0.8 * length(unique_bands))
+)
+
+#split data by longitude band
+train_data <- occurrence_data %>%
+  filter(longitude_band %in% train_bands)
+
+test_data <- occurrence_data %>%
+  filter(!longitude_band %in% train_bands)
+
+#check split
+nrow(train_data)
+nrow(test_data)
+
+length(unique(train_data$longitude_band))
+length(unique(test_data$longitude_band))
+
+unique(train_data$longitude_band)
+unique(test_data$longitude_band)
+
+```
+```{r}
+#the new columns still have missing values from the lagging of the variables
+#we fix that here with the same median imputation that we did before 
+
+#check missing values
+#colSums(is.na(train_data))
+#colSums(is.na(test_data))
+
+#remove rows missing the target variable
+train_data <- train_data %>%
+  filter(!is.na(log_occurrence_count))
+
+test_data <- test_data %>%
+  filter(!is.na(log_occurrence_count))
+
+#identify numeric predictor columns
+numeric_cols <- train_data %>%
+  select(where(is.numeric)) %>%
+  select(-log_occurrence_count) %>%
+  colnames()
+
+#calculate medians from training data only
+train_medians <- sapply(train_data[, numeric_cols], median, na.rm = TRUE)
+
+#impute train and test using training medians
+for (col in numeric_cols) {
+  train_data[[col]][is.na(train_data[[col]])] <- train_medians[[col]]
+  test_data[[col]][is.na(test_data[[col]])] <- train_medians[[col]]
+}
+
+#check again
+colSums(is.na(train_data))        #left only one so it was easier to see 
+#colSums(is.na(test_data))
+```
+```{r}
+#POSSIBLE LEAKAGE
+#removing variables with the target to avoid leakage 
+rf_train <- train_data %>%
+  select(-occurrence_count, -relative_occurrence)
+
+rf_test <- test_data %>%
+  select(-occurrence_count, -relative_occurrence)
+```
+
+
+## NEW RANDOM FOREST CODE WITH MY NEW TARGET VARIABLE ("occurrence_count")
+```{r}
+rmse <- function(actual, predicted) {
+  sqrt(mean((actual - predicted)^2))
+}
+
+r2 <- function(actual, predicted) {
+  cor(actual, predicted)^2
+}
+
+set.seed(123)
+
+rf_model <- randomForest(
+  log_occurrence_count ~ .,
+  data = rf_train,
+  ntree = 500,
+  mtry = floor(sqrt(ncol(rf_train) - 1)),
+  importance = TRUE
+)
+
+rf_train_pred <- predict(rf_model, newdata = rf_train)
+rf_test_pred  <- predict(rf_model, newdata = rf_test)
+
+rf_train_rmse <- rmse(rf_train$log_occurrence_count, rf_train_pred)
+rf_train_r2   <- r2(rf_train$log_occurrence_count, rf_train_pred)
+
+rf_test_rmse <- rmse(rf_test$log_occurrence_count, rf_test_pred)
+rf_test_r2   <- r2(rf_test$log_occurrence_count, rf_test_pred)
+
+rf_train_rmse
+rf_train_r2
+rf_test_rmse
+rf_test_r2
+
+importance(rf_model)
+varImpPlot(rf_model)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+|
+v later issues 
+--------------------------------------------------------------------------------------------
+
+2. Your formal preprocessing pipeline is still incomplete/unclear. 
+IMPORTANT: You have some solid steps here but I need a little more clarity in a few places. You did a great job with the creation of the spatial (longitude) bands! Also you did well with making your temporal lags. However, 
+
+   1. it's unclear if you applied that to both train and test or just train or -- more appropriately -- spatial bands to train/test and temporal lags ONLY to train. Also, 
+   2. clarify: did you do a temporal split? If so, what were the year cutoffs? 
+   3. And is an 80/20 split appropriate for the dimensionality of your data? Also, 
+   4. your order of operations is unclear, specifically whether imputation and scaling were also performed using training data only. These kinds of things can be cleared up quickly with just an extra clarifying sentence or two. 
+   5. HOWEVER - given the temporal and spatial structure (lags, longitudinal bands), there is also a risk of leakage that is not addressed. So, in your Final Deliverable, aim to provide a clearer, step-by-step pipeline that explicitly handles these issues. How are you being careful not to introduce possible leakage? And are you creating any opportunities for bias your reader should be aware of?
+
+
+PROBLEM: general cleanup and clarification of the pipeline (clean through text writing in both the deliverable and the RMarkdown)
+WHY: it's unclear (straight up)
+
+SOLUTION:
+
+
+   
+   
+   
