@@ -49,7 +49,7 @@ suitability change with the varying climate?
 
 # Week 8: Presentation and Final Deliverables
   - 5/4/26: finished new introduction and slides for presentation 
-  - 5/5/26: 
+  - 5/5/26: finished slides and recorded presentation, peer-reviewed other students' work
   - 5/6/26: 
   - 5/7/26:
   - 5/8/26:
