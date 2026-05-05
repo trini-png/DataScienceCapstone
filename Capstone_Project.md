@@ -42,7 +42,16 @@ suitability change with the varying climate?
   - 4/24/26: finished all of my graphs and tables, finished my write-up, handed it in
 
   # Week 7: Hyperparameter Tuning (and finishing my remaining models)
-  - 4/26/26: 
-  - 4/27/26: 
-  - 4/28/26: 
-  - 4/29/26: 
+  - 4/27/26: finished original Random Forest model
+  - 4/28/26: created spatial split and another Random Forest model (and compared them)
+  - 4/30/26: started write-up
+  - 5/1/26: finished write-up
+
+# Week 8: Presentation and Final Deliverables
+  - 5/4/26: finished new introduction and slides for presentation 
+  - 5/5/26: 
+  - 5/6/26: 
+  - 5/7/26:
+  - 5/8/26:
+  - 5/9/26:
+  - 5/10/26:
