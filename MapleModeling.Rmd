@@ -3,8 +3,9 @@ title: "MapleModeling"
 author: "Trinity Tobin"
 date: "`r Sys.Date()`"
 output:
-  word_document: default
+  pdf_document: default
   html_document: default
+  word_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -448,11 +449,36 @@ WHY: assuming no info is an occurrence
 SOLUTION: changing the variable from "abundance" to "occurrence_count"
 WHY: this will elminate the assumption of an occurrence and serve as a more accurate quantification based on the true occurrences
 ```{r}
+
+
 #making my response variable based on occurrences 
+# Each GBIF row is treated as one occurrence record
 sugar_climate_clean <- sugar_climate_clean %>%
   mutate(occurrence_record = 1)
 
-#putting it together 
+#grouping by longitude_band-year level
+occurrence_data <- sugar_climate_clean %>%
+  group_by(longitude_band, year) %>%
+  summarise(
+    occurrence_count = n(),
+    reported_individual_count = sum(individualCount, na.rm = TRUE),
+    records_with_individual_count = sum(!is.na(individualCount)),
+    decimalLatitude = mean(decimalLatitude, na.rm = TRUE),
+    decimalLongitude = mean(decimalLongitude, na.rm = TRUE),
+    elevation = mean(elevation, na.rm = TRUE),
+    across(starts_with("BIO"), ~ mean(.x, na.rm = TRUE)),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    log_occurrence_count = log1p(occurrence_count)
+  ) %>%
+  group_by(year) %>%
+  mutate(
+    relative_occurrence = occurrence_count / sum(occurrence_count, na.rm = TRUE)
+  ) %>%
+  ungroup()
+
+#creating temporal lags and derived variables
 occurrence_data <- occurrence_data %>%
   arrange(longitude_band, year) %>%
   group_by(longitude_band) %>%
@@ -471,6 +497,8 @@ occurrence_data <- occurrence_data %>%
   ) %>%
   filter(!is.na(lag_occurrence_count))
 
+head(occurrence_data)
+colSums(is.na(occurrence_data))
 
 
 
@@ -709,74 +737,60 @@ rf_spatial_cv_model$results
 ```
 
 ```{r}
-#HYPERPARAMETER TUNING 
+#HYPERPARAMETER TUNING WITH SPATIAL CROSS-VALIDATION
 
 set.seed(123)
 
-#creating a tuning grid 
-#this code makes a list of hyperparameter values to try (trying them all at once)
-#60 different models 
-tuning_grid <- expand.grid(
-  mtry = c(3, 5, 7, 10, 15),
-  #how many predictors the model considers at each split 
-  
-  nodesize = c(1, 3, 5, 10),
-  #minimum number of observations allowed in final tree node 
-  
-  ntree = c(300, 500, 1000)
-  #number of trees in the forest 
+#defining a tuning grid (mtry only for caret RF)
+
+
+tune_grid <- expand.grid(
+  mtry = c(3, 5, 7, 10, 15)
 )
 
-#creating a tuning results table
-#each row is one model and how well it performs 
-tuning_results <- data.frame(
-  mtry = numeric(),
-  nodesize = numeric(),
-  ntree = numeric(),
-  train_rmse = numeric(),
-  train_r2 = numeric(),
-  test_rmse = numeric(),
-  test_r2 = numeric()
+
+#training the model using spatial CV folds
+rf_spatial_cv_model <- train(
+  log_occurrence_count ~ .,
+  data = rf_train_noleak,
+  method = "rf",
+  trControl = spatial_cv_control,
+  tuneGrid = tune_grid,
+  ntree = 500,
+  importance = TRUE
 )
 
-#looping through all different parameter combinations
-for (i in 1:nrow(tuning_grid)) {
-  
-  current_mtry <- tuning_grid$mtry[i]
-  current_nodesize <- tuning_grid$nodesize[i]
-  current_ntree <- tuning_grid$ntree[i]
-  
-  rf_tuned <- randomForest(
-    log_occurrence_count ~ .,
-    data = rf_train_noleak,
-    ntree = current_ntree,
-    mtry = current_mtry,
-    nodesize = current_nodesize,
-    importance = TRUE
-  )
-  
-  train_pred <- predict(rf_tuned, newdata = rf_train_noleak)
-  test_pred  <- predict(rf_tuned, newdata = rf_test_noleak)
-  
-  tuning_results[i, ] <- c(
-    current_mtry,
-    current_nodesize,
-    current_ntree,
-    rmse(rf_train_noleak$log_occurrence_count, train_pred),
-    r2(rf_train_noleak$log_occurrence_count, train_pred),
-    rmse(rf_test_noleak$log_occurrence_count, test_pred),
-    r2(rf_test_noleak$log_occurrence_count, test_pred)
-  )
+#looking at the best hyperparameter + tuning results
+rf_spatial_cv_model$bestTune
+rf_spatial_cv_model$results
+
+
+#evaluating the cross-validation on held-out test set
+rf_spatial_test_pred <- predict(
+  rf_spatial_cv_model,
+  newdata = rf_test_noleak
+)
+
+rmse <- function(actual, predicted) {
+  sqrt(mean((actual - predicted)^2, na.rm = TRUE))
 }
 
-#viewing what my best model is after the tuning 
-tuning_results <- tuning_results %>%
-  arrange(test_rmse)
+r2 <- function(actual, predicted) {
+  cor(actual, predicted, use = "complete.obs")^2
+}
 
-tuning_results
+rf_spatial_test_rmse <- rmse(
+  rf_test_noleak$log_occurrence_count,
+  rf_spatial_test_pred
+)
 
-best_rf_params <- tuning_results[1, ]
-best_rf_params
+rf_spatial_test_r2 <- r2(
+  rf_test_noleak$log_occurrence_count,
+  rf_spatial_test_pred
+)
+
+rf_spatial_test_rmse
+rf_spatial_test_r2
 
 ```
 
@@ -812,13 +826,7 @@ plot(varImp(rf_spatial_cv_model))
 
 
 
-
-
-
-
-
-
-
+boop
 
 
 
